@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quickstart for MSAL JS</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bluebird/3.3.4/bluebird.min.js"></script>
+    <script src="https://secure.aadcdn.microsoftonline-p.com/lib/0.2.3/js/msal.js"></script>
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+</head>
+
+<body>
+<h4 id="WelcomeMessage"></h4>
+<button id="SignInPopup" onclick="signInP()">Sign In Popup</button>
+<button id="SignInRedirect" onclick="signInR()">Sign In Redirect</button>
+<br/><br/>
+<button id="CallGraph" onclick="callGraph()" style="visibility: hidden">Call MS Graph</button>
+<button id="CallExtApi" onclick="callExternalApi()" style="visibility: hidden">Call External API</button>
+<br/><br/>
+<pre id="json"></pre>
+
+<script>
+    var externalAPIUrl = "https://buildtodoservice.azurewebsites.net/api/todolist";
+    var applicationConfig = {
+        authority: "https://login.microsoftonline.com/msidlab4.onmicrosoft.com/",
+        clientID: '79d1dd3f-4de3-4b69-ac25-f2fc5eefe773', //This is your client ID
+        graphScopes: ["User.Read"],
+        apiScopes: ["api://a88bb933-319c-41b5-9f04-eff36d985612/access_as_user"],
+        graphEndpoint: "https://graph.microsoft.com/v1.0/me"
+    };
+
+    //Pass null for default authority (https://login.microsoftonline.com/common)
+    var myMSALObj = new Msal.UserAgentApplication(applicationConfig.clientID, applicationConfig.authority, acquireTokenRedirectCallBack,
+        {storeAuthStateInCookie: true, cacheLocation: "localStorage"});
+
+    function signInP() {
+        myMSALObj.loginPopup(applicationConfig.graphScopes).then(function (idToken) {
+            //Login Success
+            showWelcomeMessage();
+            acquireTokenPopupAndCallMSGraph();
+        }, function (error) {
+            console.log(error);
+        });
+    }
+
+    function signInR() {
+        myMSALObj.loginRedirect(applicationConfig.graphScopes).then(function (idToken) {
+            //Login Success
+            showWelcomeMessage();
+            acquireTokenRedirectAndCallMSGraph();
+        }, function (error) {
+            console.log(error);
+        });
+    }
+
+    function signOut() {
+        myMSALObj.logout();
+    }
+
+   function acquireTokenPopupAndCallMSGraph() {
+        //Call acquireTokenSilent (iframe) to obtain a token for Microsoft Graph
+        myMSALObj.acquireTokenSilent(applicationConfig.graphScopes).then(function (accessToken) {
+            //callMSGraph(applicationConfig.graphEndpoint, accessToken, graphAPICallback);
+        }, function (error) {
+            console.log(error);
+            // Call acquireTokenPopup (popup window) in case of acquireTokenSilent failure due to consent or interaction required ONLY
+            if (error.indexOf("consent_required") !== -1 || error.indexOf("interaction_required") !== -1 || error.indexOf("login_required") !== -1) {
+                myMSALObj.acquireTokenPopup(applicationConfig.graphScopes).then(function (accessToken) {
+                    console.log(accessToken);
+                    //callMSGraph(applicationConfig.graphEndpoint, accessToken, graphAPICallback);
+                }, function (error) {
+                    console.log(error);
+                });
+            }
+        });
+    }
+
+    function callGraph() {
+        callAPI(applicationConfig.graphEndpoint, getAccessToken(applicationConfig.graphScopes[0]), graphAPICallback);
+    }
+
+    function callExternalApi() {
+        callAPI(externalAPIUrl, getAccessToken(applicationConfig.apiScopes[0]), graphAPICallback);
+    }
+
+    function callAPI(theUrl, accessToken, callback) {
+        var xmlHttp = new XMLHttpRequest();
+        xmlHttp.onreadystatechange = function () {
+            if (this.readyState == 4 && this.status == 200)
+                callback(JSON.parse(this.responseText));
+        }
+        xmlHttp.open("GET", theUrl, true); // true for asynchronous
+        xmlHttp.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+        xmlHttp.send();
+    }
+
+    function graphAPICallback(data) {
+        //Display user data on DOM
+        var divWelcome = document.getElementById('WelcomeMessage');
+        divWelcome.innerHTML = "Welcome " + myMSALObj.getUser().name + " to Microsoft Graph API!!";
+        document.getElementById("json").innerHTML = JSON.stringify(data, null, 2);
+    }
+
+    function todoAPICallback(data) {
+        var divWelcome = document.getElementById('WelcomeMessage');
+        divWelcome.innerHTML = "Welcome " + myMSALObj.getUser().name + " to To-Do List API!!";
+        document.getElementById("json").innerHTML = JSON.stringify(data, null, 2);
+    }
+
+    function showWelcomeMessage() {
+        var divWelcome = document.getElementById('WelcomeMessage');
+        divWelcome.innerHTML += 'Welcome ' + myMSALObj.getUser().name;
+        var loginbutton1 = document.getElementById('SignInPopup');
+        var loginbutton2 = document.getElementById('SignInRedirect');
+        var callGraphButton = document.getElementById('CallGraph');
+        var callExtApiButton = document.getElementById('CallExtApi');
+        loginbutton1.innerHTML = 'Sign Out';
+        loginbutton1.setAttribute('onclick', 'signOut();');
+        loginbutton2.style.visibility = 'hidden';
+        callGraphButton.style.visibility = 'visible';
+        callExtApiButton.style.visibility = 'visible';
+    }
+
+    // This function can be removed if you do not need to support IE
+    function acquireTokenRedirectAndCallMSGraph() {
+        //Call acquireTokenSilent (iframe) to obtain a token for Microsoft Graph
+        myMSALObj.acquireTokenSilent(applicationConfig.graphScopes).then(function (accessToken) {
+            console.log(accessToken);
+          //callMSGraph(applicationConfig.graphEndpoint, accessToken, graphAPICallback);
+        }, function (error) {
+            console.log(error);
+            //Call acquireTokenRedirect in case of acquireToken Failure
+            if (error.indexOf("consent_required") !== -1 || error.indexOf("interaction_required") !== -1 || error.indexOf("login_required") !== -1) {
+                myMSALObj.acquireTokenRedirect(applicationConfig.graphScopes);
+            }
+        });
+    }
+
+    function acquireTokenRedirectCallBack(errorDesc, token, error, tokenType)
+    {
+     if(tokenType === "access_token")
+     {
+         console.log(accessToken);
+         //callMSGraph(applicationConfig.graphEndpoint, accessToken, graphAPICallback);
+     } else {
+            console.log("token type is:"+tokenType);
+     }
+
+    }
+
+    function getAccessToken(scope) {
+        for ( var i = 0, len = localStorage.length; i < len; ++i ) {
+          var keyName = localStorage.key(i);
+          if(keyName.includes(applicationConfig.clientID) && keyName.includes(applicationConfig.authority)) {
+            if(keyName.includes(scope)) {
+                var tokenObject = JSON.parse(localStorage.getItem(keyName));
+                return tokenObject.accessToken;
+            }
+          }
+        }
+    }
+
+    // Browser check variables
+    var ua = window.navigator.userAgent;
+    var msie = ua.indexOf('MSIE ');
+    var msie11 = ua.indexOf('Trident/');
+    var msedge = ua.indexOf('Edge/');
+    var isIE = msie > 0 || msie11 > 0;
+    var isEdge = msedge > 0;
+
+    //If you support IE, our recommendation is that you sign-in using Redirect APIs
+    //If you as a developer are testing using Edge InPrivate mode, please add "isEdge" to the if check
+    if (!isIE) {
+        if (myMSALObj.getUser()) {// avoid duplicate code execution on page load in case of iframe and popup window.
+            showWelcomeMessage();
+            acquireTokenPopupAndCallMSGraph();
+        }
+    }
+    else {
+        document.getElementById("SignIn").onclick = function () {
+            myMSALObj.loginRedirect(applicationConfig.graphScopes);
+        };
+
+        if (myMSALObj.getUser() && !myMSALObj.isCallback(window.location.hash)) {// avoid duplicate code execution on page load in case of iframe and popup window.
+            showWelcomeMessage();
+            acquireTokenRedirectAndCallMSGraph();
+        }
+    }
+</script>
+</body>
+</html>
