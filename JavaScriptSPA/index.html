@@ -20,11 +20,11 @@
 <script>
     var externalAPIUrl = "https://buildtodoservice.azurewebsites.net/api/todolist";
     var applicationConfig = {
-        authority: "https://login.microsoftonline.com/msidlab4.onmicrosoft.com/",
-        clientID: '79d1dd3f-4de3-4b69-ac25-f2fc5eefe773', //This is your client ID
-        graphScopes: ["User.Read"],
+        authority: "https://login.windows-ppe.net/common/",
+        clientID: '7dcd9e09-1c50-4c9b-8b0d-aa70591db130', //This is your client ID
+        graphScopes: [''],
         apiScopes: ["api://a88bb933-319c-41b5-9f04-eff36d985612/access_as_user"],
-        graphEndpoint: "https://graph.microsoft.com/v1.0/me"
+        graphEndpoint: "https://graph.ppe.windows.net/me?api-version=1.6"
     };
 
     //Pass null for default authority (https://login.microsoftonline.com/common)
@@ -150,10 +150,13 @@
         for ( var i = 0, len = localStorage.length; i < len; ++i ) {
           var keyName = localStorage.key(i);
           if(keyName.includes(applicationConfig.clientID) && keyName.includes(applicationConfig.authority)) {
-            if(keyName.includes(scope)) {
+                var keyObject = JSON.parse(keyName);
                 var tokenObject = JSON.parse(localStorage.getItem(keyName));
-                return tokenObject.accessToken;
-            }
+                if (keyObject.scopes.includes(applicationConfig.clientID)) {
+                    continue;
+                } else {
+                    return tokenObject.accessToken;
+                }
           }
         }
     }
