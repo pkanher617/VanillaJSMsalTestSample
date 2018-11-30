@@ -15,16 +15,21 @@
 <button id="CallGraph" onclick="callGraph()" style="visibility: hidden">Call MS Graph</button>
 <button id="CallExtApi" onclick="callExternalApi()" style="visibility: hidden">Call External API</button>
 <br/><br/>
-<pre id="json"></pre>
+Data: <pre id="json"></pre>
+<br/>
+<input type="text" id="todoItem" style="visibility: hidden">
+<button id="addList" onclick="postTodoList()" style="visibility: hidden">Add to To-Do List</button>
+<br/>
 
 <script>
     var externalAPIUrl = "https://buildtodoservice.azurewebsites.net/api/todolist";
     var applicationConfig = {
-        authority: "https://login.windows-ppe.net/common/",
-        clientID: '7dcd9e09-1c50-4c9b-8b0d-aa70591db130', //This is your client ID
-        graphScopes: [''],
-        apiScopes: ["api://a88bb933-319c-41b5-9f04-eff36d985612/access_as_user"],
-        graphEndpoint: "https://graph.ppe.windows.net/me?api-version=1.6"
+        authority: "https://login.microsoftonline.com/msidlab4.onmicrosoft.com/",
+        clientID: '79d1dd3f-4de3-4b69-ac25-f2fc5eefe773', //This is your client ID
+        graphScopes: ['User.Read'],
+        apiScopes: ['api://a88bb933-319c-41b5-9f04-eff36d985612/access_as_user'],
+        requestedScopes: ['User.Read', 'api://a88bb933-319c-41b5-9f04-eff36d985612/access_as_user'],
+        graphEndpoint: "https://graph.microsoft.com/v1.0/me"
     };
 
     //Pass null for default authority (https://login.microsoftonline.com/common)
@@ -32,20 +37,20 @@
         {storeAuthStateInCookie: true, cacheLocation: "localStorage"});
 
     function signInP() {
-        myMSALObj.loginPopup(applicationConfig.graphScopes).then(function (idToken) {
+        myMSALObj.loginPopup(applicationConfig.requestedScopes).then(function (idToken) {
             //Login Success
             showWelcomeMessage();
-            acquireTokenPopupAndCallMSGraph();
+            applicationConfig.requestedScopes.forEach(acquireTokenPopupAndCallMSGraph);
         }, function (error) {
             console.log(error);
         });
     }
 
     function signInR() {
-        myMSALObj.loginRedirect(applicationConfig.graphScopes).then(function (idToken) {
+        myMSALObj.loginRedirect(applicationConfig.requestedScopes).then(function (idToken) {
             //Login Success
             showWelcomeMessage();
-            acquireTokenRedirectAndCallMSGraph();
+            applicationConfig.requestedScopes.forEach(acquireTokenRedirectAndCallMSGraph);
         }, function (error) {
             console.log(error);
         });
@@ -55,15 +60,15 @@
         myMSALObj.logout();
     }
 
-   function acquireTokenPopupAndCallMSGraph() {
+   function acquireTokenPopupAndCallMSGraph(scope) {
         //Call acquireTokenSilent (iframe) to obtain a token for Microsoft Graph
-        myMSALObj.acquireTokenSilent(applicationConfig.graphScopes).then(function (accessToken) {
+        myMSALObj.acquireTokenSilent([scope]).then(function (accessToken) {
             //callMSGraph(applicationConfig.graphEndpoint, accessToken, graphAPICallback);
         }, function (error) {
             console.log(error);
             // Call acquireTokenPopup (popup window) in case of acquireTokenSilent failure due to consent or interaction required ONLY
             if (error.indexOf("consent_required") !== -1 || error.indexOf("interaction_required") !== -1 || error.indexOf("login_required") !== -1) {
-                myMSALObj.acquireTokenPopup(applicationConfig.graphScopes).then(function (accessToken) {
+                myMSALObj.acquireTokenPopup([scope]).then(function (accessToken) {
                     console.log(accessToken);
                     //callMSGraph(applicationConfig.graphEndpoint, accessToken, graphAPICallback);
                 }, function (error) {
@@ -74,14 +79,30 @@
     }
 
     function callGraph() {
-        callAPI(applicationConfig.graphEndpoint, getAccessToken(applicationConfig.graphScopes[0]), graphAPICallback);
+        var todoTextField = document.getElementById('todoItem');
+        var postTextButton = document.getElementById('addList');
+        todoTextField.style.visibility = 'hidden';
+        postTextButton.style.visibility = 'hidden';
+        callGetAPI(applicationConfig.graphEndpoint, getAccessToken(applicationConfig.graphScopes[0]), graphAPICallback);
     }
 
     function callExternalApi() {
-        callAPI(externalAPIUrl, getAccessToken(applicationConfig.apiScopes[0]), graphAPICallback);
+        var todoTextField = document.getElementById('todoItem');
+        var postTextButton = document.getElementById('addList');
+        callGetAPI(externalAPIUrl, getAccessToken(applicationConfig.apiScopes[0]), todoAPICallback);
+        todoTextField.style.visibility = 'visible';
+        postTextButton.style.visibility = 'visible';
     }
 
-    function callAPI(theUrl, accessToken, callback) {
+    function postTodoList() {
+        var todoInput = document.getElementById("todoItem");
+        var postData = todoInput.value;
+        dataString = JSON.stringify({ "title" : postData });
+        todoInput.value = '';
+        callPostAPI(externalAPIUrl, dataString, getAccessToken(applicationConfig.apiScopes[0]), todoAPIPostCallback);
+    }
+
+    function callGetAPI(theUrl, accessToken, callback) {
         var xmlHttp = new XMLHttpRequest();
         xmlHttp.onreadystatechange = function () {
             if (this.readyState == 4 && this.status == 200)
@@ -90,6 +111,18 @@
         xmlHttp.open("GET", theUrl, true); // true for asynchronous
         xmlHttp.setRequestHeader('Authorization', 'Bearer ' + accessToken);
         xmlHttp.send();
+    }
+
+    function callPostAPI(theUrl, data, accessToken, callback) {
+        var xmlHttp = new XMLHttpRequest();
+        xmlHttp.onreadystatechange = function () {
+            if (this.readyState == 4 && this.status == 200)
+                callback();
+        }
+        xmlHttp.open("POST", theUrl, true); // true for asynchronous
+        xmlHttp.setRequestHeader('Authorization', 'Bearer ' + accessToken);
+        xmlHttp.setRequestHeader('Content-Type', 'application/json');
+        xmlHttp.send(data);
     }
 
     function graphAPICallback(data) {
@@ -103,6 +136,10 @@
         var divWelcome = document.getElementById('WelcomeMessage');
         divWelcome.innerHTML = "Welcome " + myMSALObj.getUser().name + " to To-Do List API!!";
         document.getElementById("json").innerHTML = JSON.stringify(data, null, 2);
+    }
+
+    function todoAPIPostCallback() {
+        callExternalApi();
     }
 
     function showWelcomeMessage() {
@@ -120,16 +157,16 @@
     }
 
     // This function can be removed if you do not need to support IE
-    function acquireTokenRedirectAndCallMSGraph() {
+    function acquireTokenRedirectAndCallMSGraph(scope) {
         //Call acquireTokenSilent (iframe) to obtain a token for Microsoft Graph
-        myMSALObj.acquireTokenSilent(applicationConfig.graphScopes).then(function (accessToken) {
+        myMSALObj.acquireTokenSilent(scope).then(function (accessToken) {
             console.log(accessToken);
           //callMSGraph(applicationConfig.graphEndpoint, accessToken, graphAPICallback);
         }, function (error) {
             console.log(error);
             //Call acquireTokenRedirect in case of acquireToken Failure
             if (error.indexOf("consent_required") !== -1 || error.indexOf("interaction_required") !== -1 || error.indexOf("login_required") !== -1) {
-                myMSALObj.acquireTokenRedirect(applicationConfig.graphScopes);
+                myMSALObj.acquireTokenRedirect(scope);
             }
         });
     }
@@ -150,13 +187,10 @@
         for ( var i = 0, len = localStorage.length; i < len; ++i ) {
           var keyName = localStorage.key(i);
           if(keyName.includes(applicationConfig.clientID) && keyName.includes(applicationConfig.authority)) {
-                var keyObject = JSON.parse(keyName);
+            if(keyName.includes(scope)) {
                 var tokenObject = JSON.parse(localStorage.getItem(keyName));
-                if (keyObject.scopes.includes(applicationConfig.clientID)) {
-                    continue;
-                } else {
-                    return tokenObject.accessToken;
-                }
+                return tokenObject.accessToken;
+            }
           }
         }
     }
@@ -174,7 +208,7 @@
     if (!isIE) {
         if (myMSALObj.getUser()) {// avoid duplicate code execution on page load in case of iframe and popup window.
             showWelcomeMessage();
-            acquireTokenPopupAndCallMSGraph();
+            applicationConfig.requestedScopes.forEach(acquireTokenPopupAndCallMSGraph);
         }
     }
     else {
